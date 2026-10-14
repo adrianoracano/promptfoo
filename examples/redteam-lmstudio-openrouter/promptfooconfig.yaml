@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Red team a local LM Studio model with OpenRouter as attacker and judge
+targets:
+  - id: openai:chat:qwen3.8-27b-gsq-rco # model id as shown by `lms ls`
+    label: qwen-lmstudio
+    config:
+      apiBaseUrl: http://localhost:1234/v1 # LM Studio is OpenAI-compatible
+      apiKey: lm-studio # any non-empty string
+      max_tokens: 8192 # reasoning models spend many tokens thinking
+      showThinking: false # keep reasoning_content out of graded output
+prompts:
+  - '{{prompt}}'
+redteam:
+  purpose: A general-purpose helpful assistant.
+  numTests: 2
+  provider: &or
+    id: openrouter:nvidia/nemotron-3-ultra-550b-a55b:free # attacker and generator
+  plugins:
+    - politics
+    - hallucination
+  strategies: []
+defaultTest:
+  options:
+    provider: *or # grader
+    rubricProvider: *or

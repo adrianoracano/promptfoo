@@ -240,6 +240,19 @@ describe('doRedteamRun', () => {
     expect(vi.mocked(doEval).mock.calls[0][3]).not.toHaveProperty('generationTokenUsage');
   });
 
+  it('skips generation and retries ERROR results when retryErrors is set', async () => {
+    await doRedteamRun({ retryErrors: true, maxConcurrency: 1 });
+
+    expect(doGenerateRedteam).not.toHaveBeenCalled();
+    expect(doEval).toHaveBeenCalledTimes(1);
+    expect(doEval).toHaveBeenCalledWith(
+      expect.objectContaining({ retryErrors: true, config: undefined, write: true }),
+      {},
+      undefined,
+      expect.any(Object),
+    );
+  });
+
   describe('liveRedteamConfig temporary file handling', () => {
     const mockConfig = {
       prompts: ['Test prompt'],

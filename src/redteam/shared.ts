@@ -86,6 +86,31 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       logger.debug(`Live config: ${JSON.stringify(options.liveRedteamConfig, null, 2)}`);
     }
 
+    if (options.retryErrors) {
+      // The latest eval already holds the generated test cases; only re-run its ERROR results.
+      logger.info('Retrying ERROR results from the latest scan (skipping generation)...');
+      const { defaultConfig } = await loadDefaultConfig();
+      const { description: _description, ...retryOptions } = options;
+      return await doEval(
+        {
+          ...retryOptions,
+          config: undefined,
+          output: options.output ? [options.output] : undefined,
+          cache: true,
+          write: true,
+          retryErrors: true,
+        },
+        defaultConfig,
+        undefined,
+        {
+          showProgressBar: options.progressBar,
+          abortSignal: options.abortSignal,
+          progressCallback: options.progressCallback,
+          eventSource: options.eventSource,
+        },
+      );
+    }
+
     // Generate new test cases
     logger.info('Generating test cases...');
     // Strip run-specific tags from the generation options so they do not leak into the

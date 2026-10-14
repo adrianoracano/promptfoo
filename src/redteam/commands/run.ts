@@ -47,6 +47,11 @@ export function redteamRunCommand(program: Command) {
     )
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
+    .option(
+      '--retry-errors',
+      'Skip generation and retry all ERROR results from the latest evaluation',
+      false,
+    )
     .option('--no-progress-bar', 'Do not show progress bar')
     .option(
       '--strict',

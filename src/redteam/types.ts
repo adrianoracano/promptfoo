@@ -324,6 +324,7 @@ export interface RedteamRunOptions {
   delay?: number;
   remote?: boolean;
   force?: boolean;
+  retryErrors?: boolean;
   filterPrompts?: string;
   filterProviders?: string;
   filterTargets?: string;
