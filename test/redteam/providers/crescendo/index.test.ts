@@ -985,6 +985,69 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.crescendoConfidence).toBe(100);
   });
 
+  it('should export every attempt, including backtracked ones, as a tree', async () => {
+    mockGetGraderById.mockImplementation(createPassingGrader);
+    const testProvider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 10,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'refused response' })
+      .mockResolvedValueOnce({ output: 'target response' });
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ value: true, metadata: 90, rationale: 'Refused' }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: true,
+          description: 'd',
+          metadata: 70,
+          rationale: 'partial',
+        }),
+      });
+
+    const result = await testProvider.callApi('test prompt', context);
+
+    expect(result.metadata?.crescendoBacktrackCount).toBe(1);
+    const attempts = result.metadata?.crescendoAttempts;
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toMatchObject({
+      id: 0,
+      parentId: null,
+      isRefusal: true,
+      backtracked: true,
+      refusalRationale: 'Refused',
+      response: 'refused response',
+    });
+    expect(attempts[1]).toMatchObject({
+      id: 1,
+      parentId: null,
+      isRefusal: false,
+      backtracked: false,
+      evalValue: true,
+      evalScore: 70,
+    });
+  });
+
   it('should succeed via external grader when grader fails', async () => {
     const prompt = 'test prompt';
     const context = {

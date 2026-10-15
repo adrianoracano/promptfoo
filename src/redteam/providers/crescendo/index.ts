@@ -94,6 +94,25 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
 
 /**
+ * One attempted turn in a Crescendo run, including turns later discarded by backtracking.
+ * `parentId` is the previously kept node (null for the first turn), so the nodes form a tree.
+ */
+interface CrescendoAttempt {
+  id: number;
+  parentId: number | null;
+  round: number;
+  attackPrompt: string;
+  response: string;
+  isRefusal: boolean;
+  refusalRationale?: string;
+  backtracked: boolean;
+  graderPassed?: boolean;
+  evalValue?: boolean;
+  evalScore?: number;
+  evalRationale?: string;
+}
+
+/**
  * Represents metadata for the Crescendo conversation process.
  */
 interface CrescendoMetadata extends BaseRedteamMetadata {
@@ -101,6 +120,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
   crescendoConfidence: number | null;
+  crescendoAttempts: CrescendoAttempt[];
   stopReason: RoundBacktrackingStopReason;
   successfulAttacks?: SuccessfulAttack[];
   totalSuccessfulAttacks?: number;
@@ -305,6 +325,9 @@ export class CrescendoProvider implements ApiProvider {
     let lastResponseMessages: Message[] = [];
     let evalFlag = false;
     let evalPercentage: number | null = null;
+
+    const attempts: CrescendoAttempt[] = [];
+    let lastKeptAttemptId: number | null = null;
 
     let objectiveScore: { value: number; rationale: string } | undefined;
     let storedGraderResult: GradingResult | undefined;
@@ -591,7 +614,20 @@ export class CrescendoProvider implements ApiProvider {
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
         );
 
+        const attempt: CrescendoAttempt = {
+          id: attempts.length,
+          parentId: lastKeptAttemptId,
+          round: roundNum,
+          attackPrompt: lastFinalAttackPrompt || attackPrompt,
+          response: lastResponse.output,
+          isRefusal,
+          refusalRationale,
+          backtracked: false,
+        };
+        attempts.push(attempt);
+
         if (isRefusal && !this.stateful) {
+          attempt.backtracked = true;
           logger.debug('\n[Crescendo] Response Rejected, performing back tracking...\n');
           backtrackCount++;
           this.targetConversationId = await this.backtrackMemory(this.targetConversationId);
@@ -721,6 +757,7 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
+            attempt.graderPassed = grade.pass;
             storedGraderResult = accumulateGraderResult(
               storedGraderResult,
               {
@@ -757,6 +794,8 @@ export class CrescendoProvider implements ApiProvider {
           inputVars: lastInputVars,
         });
 
+        lastKeptAttemptId = attempt.id;
+
         if (graderPassed === false) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
 
@@ -777,6 +816,9 @@ export class CrescendoProvider implements ApiProvider {
         const evalScore = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
+        attempt.evalValue = evalScore.value;
+        attempt.evalScore = evalScore.metadata;
+        attempt.evalRationale = evalScore.rationale;
         objectiveScore = {
           value: evalScore.metadata,
           rationale: evalScore.rationale,
@@ -850,6 +892,7 @@ export class CrescendoProvider implements ApiProvider {
           crescendoBacktrackCount: backtrackCount,
           crescendoResult: evalFlag,
           crescendoConfidence: evalPercentage,
+          crescendoAttempts: attempts,
           stopReason: exitReason,
           redteamHistory,
           successfulAttacks: this.successfulAttacks,
